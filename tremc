@@ -2380,7 +2380,7 @@ class Interface(object):
         peers = self.torrent_details['peers'][start:end]
 
         # Find width of columns
-        clientname_width = 0
+        clientname_width = 30
         address_width = 0
         port_width = 0
         for peer in peers:
