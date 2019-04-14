@@ -2389,7 +2389,7 @@ class Interface(object):
             if len(str(peer['port'])) > port_width: port_width = len(str(peer['port']))
 
         # Column names
-        column_names = 'Flags   %3d Down   %3d Up Progress           ETA ' % \
+        column_names = 'Flags   %3d Down   %3d Up Progress          ETA     ' % \
             (self.torrent_details['peersSendingToUs'], self.torrent_details['peersGettingFromUs'])
         column_names += 'Client'.ljust(clientname_width + 1) \
             + 'Address'.ljust(address_width+port_width+1)
@@ -2448,14 +2448,14 @@ class Interface(object):
 
             # ETA
             if peer['progress'] < 1 and peer['download_speed'] > 1024:
-                self.pad.addstr(" %8s %4s " % \
+                self.pad.addstr(" %8s %7s " % \
                                     ('~' + scale_bytes(peer['download_speed']),
                                      '~' + scale_time(peer['time_left'])))
             else:
                 if peer['progress'] < 1:
-                    self.pad.addstr("   <guessing>  ")
+                    self.pad.addstr("   <guessing>     ")
                 else:
-                    self.pad.addstr("               ")
+                    self.pad.addstr("                  ")
             # Client
             self.pad.addstr(peer['clientName'].ljust(clientname_width + 1))
             # Address:Port
@@ -3322,12 +3322,15 @@ def percent(full, part):
     return percent
 
 
-def scale_time(seconds, type='short'):
+def scale_time(seconds, type='short', _depth=1):
     minute_in_sec = float(60)
     hour_in_sec   = float(3600)
     day_in_sec    = float(86400)
     month_in_sec  = 27.321661 * day_in_sec # from wikipedia
     year_in_sec   = 365.25    * day_in_sec # from wikipedia
+
+    result = None
+    remainder = 0
 
     if seconds < 0:
         return ('?', 'some time')[type=='long']
@@ -3335,47 +3338,56 @@ def scale_time(seconds, type='short'):
     elif seconds < minute_in_sec:
         if type == 'long':
             if seconds < 5:
-                return 'now'
+                result = 'now'
             else:
-                return "%d second%s" % (seconds, ('', 's')[seconds>1])
+                result = "%d second%s" % (seconds, ('', 's')[seconds>1])
         else:
-            return "%ds" % seconds
+            result = "%ds" % seconds
 
     elif seconds < hour_in_sec:
-        minutes = round(seconds / minute_in_sec, 0)
+        minutes = int(seconds / minute_in_sec)
+        remainder = seconds - minutes*minute_in_sec
         if type == 'long':
-            return "%d minute%s" % (minutes, ('', 's')[minutes>1])
+            result = "%d minute%s" % (minutes, ('', 's')[minutes>1])
         else:
-            return "%dm" % minutes
+            result = "%dm" % minutes
 
     elif seconds < day_in_sec:
-        hours = round(seconds / hour_in_sec, 0)
+        hours = int(seconds / hour_in_sec)
+        remainder = seconds - hours*hour_in_sec
         if type == 'long':
-            return "%d hour%s" % (hours, ('', 's')[hours>1])
+            result = "%d hour%s" % (hours, ('', 's')[hours>1])
         else:
-            return "%dh" % hours
+            result = "%dh" % hours
 
     elif seconds < month_in_sec:
-        days = round(seconds / day_in_sec, 0)
+        days = int(seconds / day_in_sec)
+        remainder = seconds - days*day_in_sec
         if type == 'long':
-            return "%d day%s" % (days, ('', 's')[days>1])
+            result = "%d day%s" % (days, ('', 's')[days>1])
         else:
-            return "%dd" % days
+            result = "%dd" % days
 
     elif seconds < year_in_sec:
-        months = round(seconds / month_in_sec, 0)
+        months = int(seconds / month_in_sec)
+        remainder = seconds - int(months*month_in_sec)
         if type == 'long':
-            return "%d month%s" % (months, ('', 's')[months>1])
+            result = "%d month%s" % (months, ('', 's')[months>1])
         else:
-            return "%dM" % months
+            result = "%dM" % months
 
     else:
-        years = round(seconds / year_in_sec, 0)
+        years = int(seconds / year_in_sec)
+        remainder = seconds - int(years*year_in_sec)
         if type == 'long':
-            return "%d year%s" % (years, ('', 's')[years>1])
+            result = "%d year%s" % (years, ('', 's')[years>1])
         else:
-            return "%dy" % years
+            result = "%dy" % years
 
+    if remainder > 0 and _depth < 2:
+        return (("%s%s", "%s %s")[type=='long']) % (result, scale_time(remainder, type, _depth+1))
+    else:
+        return result
 
 def timestamp(timestamp, format="%x %X"):
     if timestamp < 1:
