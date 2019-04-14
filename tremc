@@ -3528,8 +3528,8 @@ def num2str(num, format='%s'):
 def debug(data):
     if cmd_args.DEBUG:
         file = open("debug.log", 'a')
-        if isinstance(data, str) or isinstance(data, str):
-            file.write(data.encode(ENCODING, 'replace'))
+        if isinstance(data, str):
+            file.write(data)
         else:
             import pprint
             pp = pprint.PrettyPrinter(indent=4)
