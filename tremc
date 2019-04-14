@@ -989,10 +989,7 @@ class Interface(object):
         try:
             self.init_screen()
             self.run()
-        except curses.error:
-            self.restore_screen()
-            raise
-        else:
+        finally:
             self.restore_screen()
 
         print()
