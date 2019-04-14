@@ -96,6 +96,8 @@ if features['geoip']:
         if hasattr(geo_ip6, 'country_code_by_addr_v6'):
             return geo_ip6.country_code_by_addr_v6(addr)
 
+if features['dns']:
+    adns_status_string = {adns.status.__dict__[name]: name for name in dir(adns.status) if not name.startswith('_')}
 
 # define config defaults
 config = configparser.ConfigParser()
@@ -367,7 +369,7 @@ class Transmission(object):
         self.hosts_cache = dict()
         self.geo_ips_cache = dict()
         if features['dns']:
-            self.resolver = adns.init()
+            self.resolver = adns.init(flags=adns.iflags.noserverwarn)
         if features['geoip']:
             self.geo_ip = GeoIP.new(GeoIP.GEOIP_MEMORY_CACHE)
             try:
@@ -493,12 +495,7 @@ class Transmission(object):
                 this_peer['last_progress'] = peer['progress']  # remember progress
             this_torrent['peers'][index].update(this_peer)
 
-            # resolve and locate peer's ip
-            if features['dns'] and ip not in self.hosts_cache:
-                try:
-                    self.hosts_cache[ip] = self.resolver.submit_reverse(ip, adns.rr.PTR)
-                except adns.Error:
-                    pass
+            # locate peer's ip
             if features['geoip'] and ip not in self.geo_ips_cache:
                 self.geo_ips_cache[ip] = country_code_by_addr_vany(self.geo_ip, self.geo_ip6, ip)
                 if self.geo_ips_cache[ip] is None:
@@ -2400,18 +2397,33 @@ class Interface(object):
         # Peers
         hosts = server.get_hosts()
         geo_ips = server.get_geo_ips()
+        dns_query_count = 0
         for index, peer in enumerate(peers):
             if features['dns']:
                 try:
-                    try:
-                        host = hosts[peer['address']].check()
-                        host_name = host[3][0]
-                    except (IndexError, KeyError):
-                        host_name = "<not resolvable>"
+                    ip = peer['address']
+                    if ip not in hosts:
+                        host_name = "<resolving>"
+                        if dns_query_count < 10:
+                            hosts[ip] = server.resolver.submit_reverse(peer['address'], adns.rr.PTRraw)
+                            dns_query_count += 1
+                    else:
+                        try:
+                            host = hosts[peer['address']].check()
+                            # dns server refused the query (too many requests) or connection error, try again
+                            if host[0] in (adns.status.rcoderefused, adns.status.allservfail):
+                                host_name = "<resolving>"
+                                hosts[ip] = server.resolver.submit_reverse(peer['address'], adns.rr.PTRraw)
+                            elif host[0] != 0:
+                                host_name = "<%s>" % adns_status_string[host[0]]
+                            else:
+                                host_name = host[3][0].decode('utf-8', 'replace')
+                        except (IndexError, KeyError):
+                            host_name = "<not resolvable>"
                 except adns.NotReady:
                     host_name = "<resolving>"
                 except adns.Error as msg:
-                    host_name = msg
+                    host_name = "<%s>" % msg
 
             upload_tag = download_tag = line_tag = 0
             if peer['rateToPeer']:   upload_tag   = curses.A_BOLD
@@ -2447,7 +2459,7 @@ class Interface(object):
             # Country
             if features['geoip']: self.pad.addstr("  %2s   " % geo_ips[peer['address']])
             # Host
-            if features['dns']: self.pad.addstr(host_name, curses.A_DIM)
+            if features['dns']: self.pad.addstr(host_name, curses.A_DIM if host_name.startswith("<") else curses.A_NORMAL)
             ypos += 1
 
     def draw_trackerlist(self, ypos):
